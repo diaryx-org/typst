@@ -125,7 +125,11 @@ impl Span {
     ///
     /// If one of the range's parts exceeds the maximum value of `2^23-1`, it is
     /// saturated.
-    pub(crate) const fn from_range(id: FileId, range: Range<usize>) -> Self {
+    ///
+    /// Changed by diaryx-org: public rather than `pub(crate)`, so that content
+    /// built outside Typst markup can carry spans into its own source. See
+    /// PATCH.md.
+    pub const fn from_range(id: FileId, range: Range<usize>) -> Self {
         let start = saturate(range.start, Self::RANGE_VALUE_MAX);
         let end = saturate(range.end, Self::RANGE_VALUE_MAX);
         let number = (start << Self::RANGE_VALUE_BITS) | end;
