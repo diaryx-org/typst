@@ -50,7 +50,7 @@ use typst_library::diag::{
 };
 use typst_library::engine::{Engine, Route, Sink, Traced};
 use typst_library::foundations::{
-    NativeRuleMap, Output, StyleChain, Styles, Target, TargetElem, Value,
+    Content, Module, NativeRuleMap, Output, StyleChain, Styles, Target, TargetElem, Value,
 };
 use typst_library::introspection::{
     EmptyIntrospector, ITER_NAMES, Introspector, MAX_ITERS,
@@ -76,9 +76,48 @@ where
     T: Output,
 {
     let mut sink = Sink::new();
-    let output = compile_impl::<T>(world.track(), Traced::default().track(), &mut sink)
-        .map_err(deduplicate);
+    let output = compile_impl::<T>(
+        world.track(),
+        Traced::default().track(),
+        &mut sink,
+        &main_content,
+    )
+    .map_err(deduplicate);
     Warned { output, warnings: sink.warnings() }
+}
+
+/// Compiles sources into an output, laying out content that `body` builds
+/// instead of the main file's own content.
+///
+/// The main file is evaluated as usual, and `body` receives the resulting
+/// module, so it can call functions the main file defines (a template, say)
+/// with content built outside of Typst markup. `body` runs once per layout
+/// iteration, with that iteration's engine, so content that depends on
+/// introspection settles the same way it does in [`compile`].
+///
+/// Content passed to the main file this way stays out of the [`World`] and
+/// the [`Library`], whose hashes every memoized layout depends on, so a
+/// change to it invalidates only the layout it affects.
+///
+/// Added by diaryx-org; not in upstream Typst. See PATCH.md.
+#[typst_macros::time]
+pub fn compile_with<T>(
+    world: &dyn World,
+    body: &dyn Fn(&mut Engine, &Module) -> SourceResult<Content>,
+) -> Warned<SourceResult<T>>
+where
+    T: Output,
+{
+    let mut sink = Sink::new();
+    let output =
+        compile_impl::<T>(world.track(), Traced::default().track(), &mut sink, body)
+            .map_err(deduplicate);
+    Warned { output, warnings: sink.warnings() }
+}
+
+/// The body [`compile`] lays out: the main file's own content.
+fn main_content(_: &mut Engine, module: &Module) -> SourceResult<Content> {
+    Ok(module.clone().content())
 }
 
 /// Compiles sources and returns all values and styles observed at the given
@@ -90,7 +129,7 @@ where
 {
     let mut sink = Sink::new();
     let traced = Traced::new(span);
-    compile_impl::<T>(world.track(), traced.track(), &mut sink).ok();
+    compile_impl::<T>(world.track(), traced.track(), &mut sink, &main_content).ok();
     sink.values()
 }
 
@@ -100,6 +139,7 @@ fn compile_impl<T: Output>(
     world: Tracked<dyn World + '_>,
     traced: Tracked<Traced>,
     sink: &mut Sink,
+    body: &dyn Fn(&mut Engine, &Module) -> SourceResult<Content>,
 ) -> SourceResult<T> {
     let library = world.library();
     match T::target() {
@@ -120,15 +160,14 @@ fn compile_impl<T: Output>(
         .map_err(|err| hint_invalid_main_file(world, err, main))?;
 
     // First evaluate the main source file into a module.
-    let content = typst_eval::eval(
+    let module = typst_eval::eval(
         world,
         library,
         traced,
         sink.track_mut(),
         Route::default().track(),
         &main,
-    )?
-    .content();
+    )?;
 
     let mut history: ArrayVec<T, { MAX_ITERS - 1 }> = ArrayVec::new();
     let mut document: T;
@@ -153,6 +192,7 @@ fn compile_impl<T: Output>(
             route: Route::default(),
         };
 
+        let content = body(&mut engine, &module)?;
         document = T::create(&mut engine, &content, styles)?;
 
         if timed!("check stabilized", constraint.validate(document.introspector())) {
