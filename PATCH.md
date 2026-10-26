@@ -3,10 +3,10 @@
 This fork exists so that [twig-export](https://github.com/diaryx-org/twig-export)
 can lay out Typst content it builds in Rust from a Markdown tree, with a Typst
 template for the procedural part of a page. The argument is twig-export's
-`docs/proposals/typst-stays-upstream-pinned-under-markdown.md`.
+`docs/proposals/typst-is-forked-and-kept-under-markdown.md`.
 
-The branch `twig` is an upstream release tag plus the commits below, and
-nothing else. At each Typst release it is rebased onto the new tag. Each patch
+The branch `twig` is an upstream release tag plus the patches below, and
+commits that change only this file. At each Typst release it is rebased onto the new tag. Each patch
 goes when upstream has an equivalent.
 
 Base: `v0.15.1` (`9dfd3a0`).
