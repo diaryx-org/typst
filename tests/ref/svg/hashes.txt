@@ -937,6 +937,10 @@ ec2290f56d9653acec9fc323446976ca linebreak-hyphen-nbsp
 cf8f43d76050d8fdbd0e02328aab7e02 linebreak-narrow-nbsp
 6b52a8e1d92e9d3f366ef72e71f1218e linebreak-overflow
 11bbe621d5f754ac4b5b7d2bb86df40c linebreak-overflow-double
+f81f04f2f0cf4400eb5092909666af45 linebreak-overflow-wrap-break-word
+89744b00a57d34cf032a33f525e1521c linebreak-overflow-wrap-break-word-fits
+c1a84b6e6fe8bffaf31712855a71ccea linebreak-overflow-wrap-break-word-optimized
+dc0d24cd35d8c9f2a4d5c7d56363dca6 linebreak-overflow-wrap-normal
 f864acb65ada1eb1c4c113f1605e6721 linebreak-shape-run
 0b1f70a3bdaa7d1451b14b2a7b1cabf0 linebreak-thai
 faac753dfea62cce4dc6f1f21e049df7 linebreak-whitespace-trimming

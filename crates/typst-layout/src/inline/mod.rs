@@ -18,8 +18,8 @@ use typst_library::foundations::{Packed, Smart, StyleChain};
 use typst_library::introspection::{Introspector, Locator, LocatorLink, SplitLocator};
 use typst_library::layout::{Abs, AlignElem, Dir, FixedAlignment, Fragment, Size};
 use typst_library::model::{
-    EnumElem, FirstLineIndent, JustificationLimits, Linebreaks, ListElem, ParElem,
-    ParLine, ParLineMarker, TermsElem,
+    EnumElem, FirstLineIndent, JustificationLimits, Linebreaks, ListElem, OverflowWrap,
+    ParElem, ParLine, ParLineMarker, TermsElem,
 };
 use typst_library::routines::{Arenas, Pair, RealizationKind};
 use typst_library::text::{Costs, Lang, TextElem};
@@ -116,6 +116,7 @@ fn layout_par_impl(
         &ConfigBase {
             justify: elem.justify.get(styles),
             linebreaks: elem.linebreaks.get(styles),
+            overflow_wrap: elem.overflow_wrap.get(styles),
             first_line_indent: elem.first_line_indent.get(styles),
             hanging_indent: elem.hanging_indent.resolve(styles),
         },
@@ -142,6 +143,7 @@ pub fn layout_inline<'a>(
         &ConfigBase {
             justify: shared.get(ParElem::justify),
             linebreaks: shared.get(ParElem::linebreaks),
+            overflow_wrap: shared.get(ParElem::overflow_wrap),
             first_line_indent: shared.get(ParElem::first_line_indent),
             hanging_indent: shared.resolve(ParElem::hanging_indent),
         },
@@ -194,6 +196,7 @@ fn configuration(
         linebreaks: base.linebreaks.unwrap_or_else(|| {
             if justify { Linebreaks::Optimized } else { Linebreaks::Simple }
         }),
+        overflow_wrap: base.overflow_wrap,
         first_line_indent: {
             let amount = base.first_line_indent.amount();
             let all = base.first_line_indent.all();
@@ -261,6 +264,7 @@ pub enum ParSituation {
 struct ConfigBase {
     justify: bool,
     linebreaks: Smart<Linebreaks>,
+    overflow_wrap: OverflowWrap,
     first_line_indent: FirstLineIndent,
     hanging_indent: Abs,
 }
@@ -273,6 +277,9 @@ struct Config {
     justification_limits: JustificationLimits,
     /// How to determine line breaks.
     linebreaks: Linebreaks,
+    /// What to do with a run too wide for a line of its own. Added by
+    /// diaryx-org; see PATCH.md.
+    overflow_wrap: OverflowWrap,
     /// The indent the first line of a paragraph should have.
     first_line_indent: Abs,
     /// The indent that all but the first line of a paragraph should have.

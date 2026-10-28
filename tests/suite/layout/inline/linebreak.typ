@@ -8,6 +8,35 @@ This is a spaceexceedinglylongy.
 // Test two overlong words in a row.
 Supercalifragilisticexpialidocious Expialigoricmetrioxidation.
 
+--- linebreak-overflow-wrap-normal paged ---
+// Test that a run too wide for a line overflows it by default.
+#set page(width: 100pt)
+A Hooray!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! and on.
+
+--- linebreak-overflow-wrap-break-word paged ---
+// Test that with `break-word`, a run too wide for a line starts one of its
+// own and breaks between characters only there.
+#set page(width: 100pt)
+#set par(overflow-wrap: "break-word")
+A Hooray!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! and on.
+
+--- linebreak-overflow-wrap-break-word-optimized paged ---
+// Test the same with optimized line breaks.
+#set page(width: 100pt)
+#set par(overflow-wrap: "break-word", linebreaks: "optimized", justify: true)
+A Hooray!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! and then some more words after it.
+
+--- linebreak-overflow-wrap-break-word-fits paged ---
+// Test that with `break-word`, a paragraph whose words fit breaks as it
+// would without it.
+#set page(width: 100pt)
+#set par(overflow-wrap: "break-word")
+Some texts feature many longer words that wrap.
+
+--- linebreak-overflow-wrap-invalid eval ---
+// Error: 25-31 expected "normal" or "break-word"
+#set par(overflow-wrap: "wrap")
+
 --- linebreak-hyphen-nbsp paged ---
 // Test for non-breaking space and hyphen.
 There are non\u{2011}breaking~characters.

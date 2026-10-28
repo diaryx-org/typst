@@ -374,6 +374,30 @@ pub struct ParElem {
     /// ```
     pub linebreaks: Smart<Linebreaks>,
 
+    /// What to do with a run of text that has nowhere to break and is too
+    /// wide for a line of its own: a long URL, an identifier, a string of
+    /// punctuation.
+    ///
+    /// By default (`{"normal"}`), such a run overflows the line, as a
+    /// typesetter has always let it, for the author to notice and fix. With
+    /// `{"break-word"}`, it may break between any two characters, but only
+    /// where it could not fit otherwise: it moves to a line of its own first,
+    /// as CSS's `overflow-wrap: break-word` has it in a browser. This suits
+    /// text shown at a width its author did not choose, such as a document
+    /// reflowed to a window.
+    ///
+    /// ```example
+    /// #set page(width: 150pt)
+    /// Hooray!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ///
+    /// #set par(overflow-wrap: "break-word")
+    /// Hooray!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    /// ```
+    ///
+    /// Added by diaryx-org; not in upstream Typst. See PATCH.md.
+    #[default(OverflowWrap::Normal)]
+    pub overflow_wrap: OverflowWrap,
+
     /// The indent the first line of a paragraph should have.
     ///
     /// By default, only the first line of a consecutive paragraph will be
@@ -632,6 +656,18 @@ pub enum Linebreaks {
     /// Typst will try to produce more evenly filled lines of text by
     /// considering the whole paragraph when calculating line breaks.
     Optimized,
+}
+
+/// What to do with a run of text too wide for a line of its own.
+///
+/// Added by diaryx-org; not in upstream Typst. See PATCH.md.
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash, Cast)]
+pub enum OverflowWrap {
+    /// Let it overflow the line.
+    #[default]
+    Normal,
+    /// Break it between any two characters, where it cannot fit otherwise.
+    BreakWord,
 }
 
 /// Configuration for first line indent.

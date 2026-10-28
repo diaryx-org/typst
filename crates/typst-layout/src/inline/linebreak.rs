@@ -9,7 +9,7 @@ use icu_segmenter::options::LineBreakOptions;
 use icu_segmenter::{LineSegmenter, LineSegmenterBorrowed};
 use typst_library::engine::Engine;
 use typst_library::layout::{Abs, Em};
-use typst_library::model::Linebreaks;
+use typst_library::model::{Linebreaks, OverflowWrap};
 use typst_library::text::{Lang, TextElem, is_default_ignorable};
 use typst_syntax::link_prefix;
 use typst_utils::Scalar;
@@ -28,6 +28,12 @@ type Cost = f64;
 // so things work a bit differently.
 const DEFAULT_HYPH_COST: Cost = 135.0;
 const DEFAULT_RUNT_COST: Cost = 100.0;
+
+/// The cost of a break inside a run too wide for a line of its own
+/// (`par.overflow-wrap: "break-word"`): far above any hyphenation, so it is
+/// taken only where nothing else fits, and far below an overfull line's.
+/// Added by diaryx-org; see PATCH.md.
+const EMERGENCY_COST: Cost = 5000.0;
 
 // Other parameters.
 const MIN_RATIO: f64 = -1.0;
@@ -71,6 +77,10 @@ pub enum Breakpoint {
     /// An opportunity for hyphenating and how many chars are before/after it
     /// in the word.
     Hyphen(u8, u8),
+    /// An opportunity between two graphemes of a run too wide for a line of
+    /// its own, where `par.overflow-wrap` is `{"break-word"}`: taken only where
+    /// nothing else fits. Added by diaryx-org; see PATCH.md.
+    Emergency,
 }
 
 impl Breakpoint {
@@ -118,7 +128,7 @@ impl Breakpoint {
             }
 
             // Trim nothing.
-            Self::Hyphen(..) => Trim::uniform(start + line.len()),
+            Self::Hyphen(..) | Self::Emergency => Trim::uniform(start + line.len()),
         }
     }
 
@@ -154,10 +164,57 @@ pub fn linebreak<'a>(
     p: &'a Preparation<'a>,
     width: Abs,
 ) -> Vec<Line<'a>> {
-    match p.config.linebreaks {
-        Linebreaks::Simple => linebreak_simple(engine, p, width),
-        Linebreaks::Optimized => linebreak_optimized(engine, p, width),
+    let lines = linebreak_with(engine, p, width, &[]);
+
+    // With `overflow-wrap: "break-word"`, a paragraph that came out with an
+    // overfull line is broken again, its runs too wide for a line of their
+    // own allowed to break between any two graphemes. A paragraph that fits,
+    // and every paragraph by default, is broken once, as before. Added by
+    // diaryx-org; see PATCH.md.
+    if p.config.overflow_wrap == OverflowWrap::BreakWord
+        && lines.iter().any(|line| !width.fits(line.width))
+    {
+        let wide = wide_runs(engine, p, width);
+        if !wide.is_empty() {
+            return linebreak_with(engine, p, width, &wide);
+        }
     }
+
+    lines
+}
+
+/// Breaks the text into lines, with the runs `wide` allowed to break between
+/// any two graphemes.
+fn linebreak_with<'a>(
+    engine: &Engine,
+    p: &'a Preparation<'a>,
+    width: Abs,
+    wide: &[Range],
+) -> Vec<Line<'a>> {
+    match p.config.linebreaks {
+        Linebreaks::Simple if wide.is_empty() => linebreak_simple(engine, p, width),
+        Linebreaks::Simple => linebreak_simple_wrapping(engine, p, width, wide),
+        Linebreaks::Optimized => linebreak_optimized(engine, p, width, wide),
+    }
+}
+
+/// The runs between two break opportunities that are too wide for a line of
+/// their own, less their trailing whitespace. Added by diaryx-org; see
+/// PATCH.md.
+fn wide_runs(engine: &Engine, p: &Preparation, width: Abs) -> Vec<Range> {
+    let mut wide = Vec::new();
+    let mut start = 0;
+    breakpoints(p, &[], |end, breakpoint| {
+        let alone = line(engine, p, start..end, breakpoint, None);
+        if !width.fits(alone.width) {
+            let trimmed = p.text[start..end].trim_end();
+            if trimmed.chars().nth(1).is_some() {
+                wide.push(start..start + trimmed.len());
+            }
+        }
+        start = end;
+    });
+    wide
 }
 
 /// Performs line breaking in simple first-fit style. This means that we build
@@ -173,7 +230,7 @@ fn linebreak_simple<'a>(
     let mut start = 0;
     let mut last = None;
 
-    breakpoints(p, |end, breakpoint| {
+    breakpoints(p, &[], |end, breakpoint| {
         // Compute the line and its size.
         let mut attempt = line(engine, p, start..end, breakpoint, lines.last());
 
@@ -207,6 +264,75 @@ fn linebreak_simple<'a>(
     lines
 }
 
+/// Performs line breaking in simple first-fit style, as
+/// [`linebreak_simple`] does, with the runs `wide` allowed to break between
+/// any two graphemes, but only where nothing else fits: a line ends at its
+/// last ordinary breakpoint that fits rather than inside a run, so a run too
+/// wide for a line of its own starts one, as CSS's `overflow-wrap:
+/// break-word` has it. Added by diaryx-org; see PATCH.md.
+#[typst_macros::time]
+fn linebreak_simple_wrapping<'a>(
+    engine: &Engine,
+    p: &'a Preparation<'a>,
+    width: Abs,
+    wide: &[Range],
+) -> Vec<Line<'a>> {
+    let mut points = Vec::new();
+    breakpoints(p, wide, |end, breakpoint| points.push((end, breakpoint)));
+
+    let mut lines: Vec<Line<'a>> = Vec::with_capacity(16);
+    let mut start = 0;
+    // The last point the line could end at and still fit, and the last such
+    // ordinary one: each its index in `points`.
+    let mut last: Option<usize> = None;
+    let mut last_ordinary: Option<usize> = None;
+    let mut i = 0;
+
+    while i < points.len() {
+        let (end, breakpoint) = points[i];
+        let attempt = line(engine, p, start..end, breakpoint, lines.last());
+
+        if !width.fits(attempt.width) {
+            // End the line at its last ordinary breakpoint that fits, else at
+            // its last emergency one, and go on from there.
+            if let Some(j) = last_ordinary.or(last) {
+                let (e, b) = points[j];
+                lines.push(line(engine, p, start..e, b, lines.last()));
+                start = e;
+                i = j + 1;
+                last = None;
+                last_ordinary = None;
+                continue;
+            }
+            // Nothing fits: the line overflows, as it would by default.
+            lines.push(attempt);
+            start = end;
+            i += 1;
+            continue;
+        }
+
+        if breakpoint == Breakpoint::Mandatory {
+            lines.push(attempt);
+            start = end;
+            last = None;
+            last_ordinary = None;
+        } else {
+            last = Some(i);
+            if breakpoint != Breakpoint::Emergency {
+                last_ordinary = Some(i);
+            }
+        }
+        i += 1;
+    }
+
+    if let Some(j) = last {
+        let (e, b) = points[j];
+        lines.push(line(engine, p, start..e, b, lines.last()));
+    }
+
+    lines
+}
+
 /// Performs line breaking in optimized Knuth-Plass style. Here, we use more
 /// context to determine the line breaks than in the simple first-fit style. For
 /// example, we might choose to cut a line short even though there is still a
@@ -228,16 +354,17 @@ fn linebreak_optimized<'a>(
     engine: &Engine,
     p: &'a Preparation<'a>,
     width: Abs,
+    wide: &[Range],
 ) -> Vec<Line<'a>> {
     let metrics = CostMetrics::compute(p);
 
     // Determines the exact costs of a likely good layout through Knuth-Plass
     // with approximate metrics. We can use this cost as an upper bound to prune
     // the search space in our proper optimization pass below.
-    let upper_bound = linebreak_optimized_approximate(engine, p, width, &metrics);
+    let upper_bound = linebreak_optimized_approximate(engine, p, width, &metrics, wide);
 
     // Using the upper bound, perform exact optimized linebreaking.
-    linebreak_optimized_bounded(engine, p, width, &metrics, upper_bound)
+    linebreak_optimized_bounded(engine, p, width, &metrics, upper_bound, wide)
 }
 
 /// Performs line breaking in optimized Knuth-Plass style, but with an upper
@@ -249,6 +376,7 @@ fn linebreak_optimized_bounded<'a>(
     width: Abs,
     metrics: &CostMetrics,
     upper_bound: Cost,
+    wide: &[Range],
 ) -> Vec<Line<'a>> {
     /// An entry in the dynamic programming table for inline layout optimization.
     struct Entry<'a> {
@@ -264,7 +392,7 @@ fn linebreak_optimized_bounded<'a>(
     let mut active = 0;
     let mut prev_end = 0;
 
-    breakpoints(p, |end, breakpoint| {
+    breakpoints(p, wide, |end, breakpoint| {
         // Find the optimal predecessor.
         let mut best: Option<Entry> = None;
 
@@ -386,6 +514,7 @@ fn linebreak_optimized_approximate(
     p: &Preparation,
     width: Abs,
     metrics: &CostMetrics,
+    wide: &[Range],
 ) -> Cost {
     // Determine the cumulative estimation metrics.
     let estimates = Estimates::compute(p);
@@ -411,7 +540,7 @@ fn linebreak_optimized_approximate(
     let mut active = 0;
     let mut prev_end = 0;
 
-    breakpoints(p, |end, breakpoint| {
+    breakpoints(p, wide, |end, breakpoint| {
         // Find the optimal predecessor.
         let mut best: Option<Entry> = None;
         for (pred_index, pred) in table.iter().enumerate().skip(active) {
@@ -667,6 +796,13 @@ fn raw_cost(
         penalty += (1.0 + extra) * metrics.hyph_cost;
     }
 
+    // Penalize a break inside a run too wide for a line of its own, so that
+    // it is taken only where nothing else fits. Added by diaryx-org; see
+    // PATCH.md.
+    if breakpoint == Breakpoint::Emergency {
+        penalty += EMERGENCY_COST;
+    }
+
     // Penalize two consecutive dashes extra (not necessarily hyphens).
     // Knuth-Plass does this separately after the squaring, with a higher cost,
     // but I couldn't find any explanation as to why.
@@ -690,7 +826,11 @@ fn raw_cost(
 /// This is an internal instead of an external iterator because it makes the
 /// code much simpler and the consumers of this function don't need the
 /// composability and flexibility of external iteration anyway.
-fn breakpoints(p: &Preparation, mut f: impl FnMut(usize, Breakpoint)) {
+///
+/// Between two of them, each run in `wide` also yields an
+/// [emergency](Breakpoint::Emergency) breakpoint between each two of its
+/// graphemes (added by diaryx-org; see PATCH.md).
+fn breakpoints(p: &Preparation, wide: &[Range], mut f: impl FnMut(usize, Breakpoint)) {
     let text = p.text;
 
     // Single breakpoint at the end for empty text.
@@ -766,12 +906,39 @@ fn breakpoints(p: &Preparation, mut f: impl FnMut(usize, Breakpoint)) {
         };
 
         // Hyphenate between the last and current breakpoint.
-        if hyphenate && last < point {
-            for segment in text[last..point].split_word_bounds() {
-                if !segment.is_empty() && segment.chars().all(char::is_alphabetic) {
-                    hyphenations(p, last, segment, &mut f);
+        let inner: Vec<&Range> =
+            wide.iter().filter(|r| r.start >= last && r.end <= point).collect();
+        if inner.is_empty() {
+            if hyphenate && last < point {
+                for segment in text[last..point].split_word_bounds() {
+                    if !segment.is_empty() && segment.chars().all(char::is_alphabetic) {
+                        hyphenations(p, last, segment, &mut f);
+                    }
+                    last += segment.len();
                 }
-                last += segment.len();
+            }
+        } else {
+            // A run too wide for a line of its own may also break between
+            // any two of its graphemes. Its hyphenation points stay, and are
+            // preferred, being cheaper. Added by diaryx-org; see PATCH.md.
+            let mut points = Vec::new();
+            if hyphenate {
+                for segment in text[last..point].split_word_bounds() {
+                    if !segment.is_empty() && segment.chars().all(char::is_alphabetic) {
+                        hyphenations(p, last, segment, |i, b| points.push((i, b)));
+                    }
+                    last += segment.len();
+                }
+            }
+            for run in inner {
+                for (i, _) in text[run.clone()].grapheme_indices(true).skip(1) {
+                    points.push((run.start + i, Breakpoint::Emergency));
+                }
+            }
+            points.sort_by_key(|&(i, b)| (i, !b.is_hyphen()));
+            points.dedup_by_key(|&mut (i, _)| i);
+            for (i, b) in points {
+                f(i, b);
             }
         }
 

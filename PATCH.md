@@ -42,6 +42,35 @@ callback, and they pass one that returns the module's content.
 
 Upstream: not yet requested.
 
+## `par.overflow-wrap`
+
+`crates/typst-library/src/model/par.rs` (the property and `OverflowWrap`),
+`crates/typst-layout/src/inline/mod.rs` (read into the line breaker's
+configuration) and `crates/typst-layout/src/inline/linebreak.rs` (the
+breaking). Tests in `tests/suite/layout/inline/linebreak.typ`, the
+`linebreak-overflow-wrap-*` ones.
+
+Typst breaks a line only where Unicode's line breaking rules or hyphenation
+allow, and a run with no such place that is wider than the line overflows it:
+a long URL, an identifier, a string of punctuation. A typesetter has always
+left that for the author to fix. An editor cannot: the text is the person's,
+shown at the width of their window. `#set par(overflow-wrap: "break-word")`
+breaks such a run between any two graphemes, but only where it cannot fit
+otherwise, as CSS's `overflow-wrap: break-word` has it.
+
+`"normal"`, the default, is Typst as it was. With `"break-word"`, a paragraph
+that comes out with no overfull line is broken once, as before. One that has
+an overfull line is broken again, with each run between two break
+opportunities that is wider than a line of its own given an emergency
+breakpoint between each two of its graphemes. The simple breaker ends a line
+at its last ordinary breakpoint that fits rather than at an emergency one, so
+a run starts a line of its own first; the optimized breaker costs an
+emergency break far above a hyphenation and far below an overfull line, so it
+takes one only where nothing else fits.
+
+Upstream: not yet requested. A good candidate: upstream has no way to keep a
+long run on the page.
+
 ## Licence
 
 Typst is Apache-2.0, and so are these changes. Each changed place is marked
