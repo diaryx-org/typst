@@ -487,7 +487,7 @@ fn linebreak_optimized_bounded<'a>(
         panic!("bounded inline layout is incomplete");
 
         #[cfg(not(debug_assertions))]
-        return linebreak_optimized_bounded(engine, p, width, metrics, Cost::INFINITY);
+        return linebreak_optimized_bounded(engine, p, width, metrics, Cost::INFINITY, wide);
     }
 
     while idx != 0 {
