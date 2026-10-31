@@ -71,6 +71,68 @@ takes one only where nothing else fits.
 Upstream: not yet requested. A good candidate: upstream has no way to keep a
 long run on the page.
 
+## Feature gates
+
+`Cargo.toml` (the workspace's `typst-library`, `typst-pdf`, `typst-svg`,
+`typst-html` and `krilla`) and the manifests of `typst`, `typst-library`,
+`typst-pdf`, `typst-svg`, `typst-html` and `typst-render`, with the members
+that build everything (`typst-cli`, `typst-bundle`, `typst-ide`, `docs`,
+`tests`, `tests/fuzz`) naming `pdf-images`. In the source: `typst-library`'s
+`foundations/plugin.rs`, `loading/mod.rs`, `model/bibliography.rs`,
+`visualize/image/mod.rs` and the new `visualize/image/pdf_off.rs`;
+`typst-pdf`'s `convert.rs` and `image.rs`; `typst-svg`'s `image.rs`.
+
+Upstream Typst has no features to leave a part of the standard library out,
+and each part below brings crates of its own: Hayagriva alone is 27, with
+ICU's collator and its data. twig-export uses none of them, and each one is
+build time and binary size in every app that sets a page with it. Each part is
+now a feature of `typst-library`, forwarded by the `typst` facade:
+
+| Feature | What it is | What it brings |
+|---|---|---|
+| `bibliography` | Reading and rendering works for `bibliography` and `cite` | hayagriva, citationberg, biblatex, icu_collator, … (turns on `yaml`) |
+| `plugin` | `plugin`, WebAssembly plugins | wasmi |
+| `csv`, `yaml`, `cbor` | Those data loaders | csv, serde_yaml, ciborium |
+| `pdf-images` | A PDF page as an `image` | hayro-syntax; in `typst-pdf` krilla's `pdf`, in `typst-svg` (and so `typst-html`) hayro and hayro-svg |
+
+All are on by default, so a build that names no features is upstream Typst.
+For a downstream to turn them off, the workspace's `typst-library`,
+`typst-pdf`, `typst-svg` and `typst-html` dependencies say
+`default-features = false`:
+otherwise one member's dependency (`typst-layout`'s, say) would turn back on,
+through Cargo's feature unification, what the downstream turned off. The
+`typst` facade's defaults turn the library's features on, and `typst-html`'s
+`pdf-images` (it draws frames with `typst-svg`); the members that build
+everything name `pdf-images` for `typst-pdf`, `typst-svg` and `typst-html`.
+With the patch, the third-party crates of `typst-cli`'s, the `typst` facade's
+and the whole workspace's dependency graphs are unchanged, crate for crate and
+feature for feature. `typst-render` always draws PDF images.
+
+Without a feature, what a document can name stays as it was wherever that is
+cheap, so that a template or package that only mentions a part still works.
+Hydra, for one, lists `bibliography` and `cite` among the elements it queries.
+
+- `bibliography`: both elements exist, cast, and take set and show rules.
+  A local `mod hayagriva` stands in for the few Hayagriva types they name: a
+  style is named but never read, and any name is accepted. Calling
+  `bibliography` fails ("bibliographies are not supported by this build of
+  Typst"), so a document has none, and a citation fails as it does in a
+  document without one.
+- `plugin`: `plugin` exists and fails. `Plugin` is an uninhabited stand-in, so
+  `PluginFunc` and `func.rs` are unchanged.
+- `csv`, `yaml`, `cbor`: the functions are not defined.
+- `pdf-images`: `PdfImage` is an uninhabited stand-in, `pdf_off.rs`, so
+  `ImageKind::Pdf` stays; loading a PDF as an image fails. `typst-pdf` without
+  the feature fails on a PDF image, and `typst-svg` draws it as nothing; either
+  arises only when another crate turns the library's feature on.
+
+Kept on purpose, with no gate: `toml`, `xml` and `json`, whose crates the
+library needs anyway (`typst-syntax` reads `typst.toml`; `roxmltree` reads SVG
+glyphs); `lorem` (lipsum), which twig-export's examples use; syntect and
+two-face, for highlighting `raw` blocks.
+
+Upstream: not requested.
+
 ## Licence
 
 Typst is Apache-2.0, and so are these changes. Each changed place is marked

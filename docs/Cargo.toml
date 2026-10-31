@@ -11,12 +11,12 @@ typst = { workspace = true }
 typst-assets = { workspace = true, features = ["fonts"] }
 typst-dev-assets = { workspace = true }
 typst-eval = { workspace = true }
-typst-html = { workspace = true }
-typst-svg = { workspace = true }
+typst-html = { workspace = true, features = ["pdf-images"] }
+typst-svg = { workspace = true, features = ["pdf-images"] }
 typst-layout = { workspace = true }
 typst-bundle = { workspace = true }
 typst-library = { workspace = true }
-typst-pdf = { workspace = true }
+typst-pdf = { workspace = true, features = ["pdf-images"] }
 typst-render = { workspace = true }
 typst-timing = { workspace = true }
 typst-utils = { workspace = true }

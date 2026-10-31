@@ -1,5 +1,7 @@
 //! Image handling.
 
+// diaryx-org: without the `pdf-images` feature, a stand-in; see PATCH.md.
+#[cfg_attr(not(feature = "pdf-images"), path = "pdf_off.rs")]
 mod pdf;
 mod raster;
 mod svg;
@@ -14,7 +16,9 @@ use std::fmt::{self, Debug, Formatter};
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 
+#[cfg_attr(not(feature = "pdf-images"), allow(unused_imports))]
 use ecow::{EcoString, eco_format};
+#[cfg(feature = "pdf-images")]
 use hayro_syntax::LoadPdfError;
 use typst_syntax::{Spanned, VirtualPath};
 use typst_utils::{LazyHash, NonZeroExt};
@@ -29,6 +33,7 @@ use crate::layout::{Length, Rel, Sizing};
 use crate::loading::{DataSource, Load, Loaded};
 use crate::model::Figurable;
 use crate::text::{LocalName, Locale, families};
+#[cfg(feature = "pdf-images")]
 use crate::visualize::image::pdf::PdfDocument;
 
 /// A raster or vector graphic.
@@ -259,6 +264,7 @@ impl Packed<ImageElem> {
                     .within(loaded)?,
                 )
             }
+            #[cfg(feature = "pdf-images")]
             ImageFormat::Vector(VectorFormat::Pdf) => {
                 let document = match PdfDocument::new(loaded.data.clone()) {
                     Ok(doc) => doc,
@@ -320,6 +326,18 @@ impl Packed<ImageElem> {
                 };
 
                 ImageKind::Pdf(pdf_image)
+            }
+            // diaryx-org; see PATCH.md.
+            #[cfg(not(feature = "pdf-images"))]
+            ImageFormat::Vector(VectorFormat::Pdf) => {
+                bail!(
+                    LoadError::binary(
+                        "failed to load PDF",
+                        "PDF images are not supported by this build of Typst",
+                    )
+                    .within(loaded)
+                    .with_hint("convert the page to an SVG or a raster image")
+                );
             }
         };
 

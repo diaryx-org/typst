@@ -22,11 +22,11 @@ typst = { workspace = true }
 typst-bundle = { workspace = true }
 typst-eval = { workspace = true }
 typst-layout = { workspace = true }
-typst-html = { workspace = true }
+typst-html = { workspace = true, features = ["pdf-images"] }
 typst-macros = { workspace = true }
-typst-pdf = { workspace = true }
+typst-pdf = { workspace = true, features = ["pdf-images"] }
 typst-render = { workspace = true }
-typst-svg = { workspace = true }
+typst-svg = { workspace = true, features = ["pdf-images"] }
 typst-timing = { workspace = true }
 typst-utils = { workspace = true }
 chrono = { workspace = true }

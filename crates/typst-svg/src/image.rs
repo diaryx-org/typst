@@ -1,9 +1,13 @@
+#[cfg_attr(not(feature = "pdf-images"), allow(unused_imports))]
 use std::sync::Arc;
 
 use base64::Engine;
 use ecow::{EcoString, eco_format};
+#[cfg(feature = "pdf-images")]
 use hayro::hayro_interpret::InterpreterSettings;
+#[cfg(feature = "pdf-images")]
 use hayro::hayro_interpret::font::{FontData, FontQuery, StandardFont};
+#[cfg(feature = "pdf-images")]
 use hayro_svg::{RenderCache, SvgRenderSettings};
 use image::{ImageEncoder, codecs::png::PngEncoder};
 use typst_library::foundations::{Bytes, Smart};
@@ -142,7 +146,15 @@ impl WebImage {
     }
 }
 
+/// Without the `pdf-images` feature there is no hayro to draw a PDF page, so
+/// it is drawn as nothing. Added by diaryx-org; see PATCH.md.
+#[cfg(not(feature = "pdf-images"))]
+fn pdf_to_svg(_: &PdfImage) -> String {
+    r#"<svg xmlns="http://www.w3.org/2000/svg"/>"#.into()
+}
+
 // Keep this in sync with `typst-png`!
+#[cfg(feature = "pdf-images")]
 fn pdf_to_svg(pdf: &PdfImage) -> String {
     let select_standard_font = move |font: StandardFont| -> Option<(FontData, u32)> {
         let bytes = match font {

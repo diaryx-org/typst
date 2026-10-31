@@ -35,5 +35,11 @@ rustc-hash = { workspace = true }
 serde = { workspace = true }
 smallvec = { workspace = true }
 
+# diaryx-org: a PDF page as an image, embedded with krilla's `pdf`. On by
+# default, as upstream has it. See PATCH.md, "Feature gates".
+[features]
+default = ["pdf-images"]
+pdf-images = ["krilla/pdf", "typst-library/pdf-images"]
+
 [lints]
 workspace = true

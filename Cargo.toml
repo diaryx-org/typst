@@ -20,16 +20,19 @@ typst = { path = "crates/typst", version = "0.15.1" }
 typst-bundle = { path = "crates/typst-bundle", version = "0.15.1" }
 typst-cli = { path = "crates/typst-cli", version = "0.15.1" }
 typst-eval = { path = "crates/typst-eval", version = "0.15.1" }
-typst-html = { path = "crates/typst-html", version = "0.15.1" }
+typst-html = { path = "crates/typst-html", version = "0.15.1", default-features = false }
 typst-ide = { path = "crates/typst-ide", version = "0.15.1" }
 typst-kit = { path = "crates/typst-kit", version = "0.15.1", default-features = false }
 typst-layout = { path = "crates/typst-layout", version = "0.15.1" }
-typst-library = { path = "crates/typst-library", version = "0.15.1" }
+# diaryx-org: no default features, so that a member's dependency does not turn
+# back on what a downstream turned off. The `typst` facade's defaults turn them
+# all on. See PATCH.md, "Feature gates".
+typst-library = { path = "crates/typst-library", version = "0.15.1", default-features = false }
 typst-macros = { path = "crates/typst-macros", version = "0.15.1" }
-typst-pdf = { path = "crates/typst-pdf", version = "0.15.1" }
+typst-pdf = { path = "crates/typst-pdf", version = "0.15.1", default-features = false }
 typst-realize = { path = "crates/typst-realize", version = "0.15.1" }
 typst-render = { path = "crates/typst-render", version = "0.15.1" }
-typst-svg = { path = "crates/typst-svg", version = "0.15.1" }
+typst-svg = { path = "crates/typst-svg", version = "0.15.1", default-features = false }
 typst-syntax = { path = "crates/typst-syntax", version = "0.15.1" }
 typst-timing = { path = "crates/typst-timing", version = "0.15.1" }
 typst-utils = { path = "crates/typst-utils", version = "0.15.1" }
@@ -76,7 +79,8 @@ indexmap = { version = "2", features = ["serde", "rayon"] }
 infer = { version = "0.19.0", default-features = false }
 itoa = "1"
 kamadak-exif = "0.6"
-krilla = { version = "0.8.2", default-features = false, features = ["raster-images", "comemo", "rayon", "pdf"] }
+# diaryx-org: "pdf" is typst-pdf's `pdf-images` feature.
+krilla = { version = "0.8.2", default-features = false, features = ["raster-images", "comemo", "rayon"] }
 krilla-svg = "0.8.1"
 kurbo = "0.13"
 libfuzzer-sys = "0.4"

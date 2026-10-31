@@ -23,8 +23,8 @@ base64 = { workspace = true }
 comemo = { workspace = true }
 ecow = { workspace = true }
 flate2 = { workspace = true }
-hayro = { workspace = true }
-hayro-svg = { workspace = true }
+hayro = { workspace = true, optional = true }
+hayro-svg = { workspace = true, optional = true }
 image = { workspace = true }
 indexmap = { workspace = true }
 itoa = { workspace = true }
@@ -32,6 +32,12 @@ rustc-hash = { workspace = true }
 ryu = { workspace = true }
 ttf-parser = { workspace = true }
 xmlwriter = { workspace = true }
+
+# diaryx-org: a PDF page as an image, drawn with hayro. On by default, as
+# upstream has it. See PATCH.md, "Feature gates".
+[features]
+default = ["pdf-images"]
+pdf-images = ["dep:hayro", "dep:hayro-svg", "typst-library/pdf-images"]
 
 [lints]
 workspace = true

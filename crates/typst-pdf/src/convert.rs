@@ -10,6 +10,7 @@ use krilla::embed::EmbedError;
 use krilla::error::{KrillaError, LimitError};
 use krilla::geom::{PathBuilder, Rect};
 use krilla::page::{PageLabel, PageSettings};
+#[cfg(feature = "pdf-images")]
 use krilla::pdf::PdfError;
 use krilla::surface::Surface;
 use krilla::tagging::ArtifactType;
@@ -468,6 +469,9 @@ fn finish(
                     hint: "convert the image to 8 bit instead";
                 )
             }
+            // diaryx-org: krilla's `pdf` is the `pdf-images` feature; see
+            // PATCH.md.
+            #[cfg(feature = "pdf-images")]
             KrillaError::Pdf(_, e, loc) => {
                 let span = to_span(loc);
                 match e {

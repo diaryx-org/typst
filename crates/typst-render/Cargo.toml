@@ -15,7 +15,8 @@ readme = { workspace = true }
 [dependencies]
 typst-assets = { workspace = true }
 typst-layout = { workspace = true }
-typst-library = { workspace = true }
+# diaryx-org: it always draws PDF images. See PATCH.md, "Feature gates".
+typst-library = { workspace = true, features = ["pdf-images"] }
 typst-macros = { workspace = true }
 typst-timing = { workspace = true }
 typst-utils = { workspace = true }

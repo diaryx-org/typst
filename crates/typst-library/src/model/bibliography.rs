@@ -1,3 +1,7 @@
+// diaryx-org: without the `bibliography` feature, much here goes unused; see
+// PATCH.md.
+#![cfg_attr(not(feature = "bibliography"), allow(unused_imports, dead_code))]
+
 use std::any::TypeId;
 use std::fmt::{self, Debug, Formatter};
 use std::num::NonZeroUsize;
@@ -7,7 +11,9 @@ use std::sync::{Arc, LazyLock};
 use comemo::{Track, Tracked, TrackedMut};
 use ecow::{EcoString, EcoVec, eco_format, eco_vec};
 use hayagriva::archive::ArchivedStyle;
+#[cfg(feature = "bibliography")]
 use hayagriva::io::BibLaTeXError;
+#[cfg(feature = "bibliography")]
 use hayagriva::{
     BibliographyDriver, BibliographyRequest, CitationItem, CitationRequest, Library,
     SpecificLocator, TransparentLocator, citationberg,
@@ -36,13 +42,17 @@ use crate::introspection::{
     QueryIntrospection,
 };
 use crate::layout::{BlockElem, Em, HElem, PadElem};
-use crate::loading::{DataSource, Load, LoadSource, Loaded, format_yaml_error};
+#[cfg(feature = "bibliography")]
+use crate::loading::format_yaml_error;
+use crate::loading::{DataSource, Load, LoadSource, Loaded};
 use crate::model::{
     CitationForm, CiteElem, CiteGroup, Destination, DirectLinkElem, FootnoteElem,
     HeadingElem, LinkElem, Url,
 };
 use crate::routines::SpanMode;
 use crate::text::{Lang, LocalName, Region, SmallcapsElem, SubElem, SuperElem, TextElem};
+#[cfg(not(feature = "bibliography"))]
+use hayagriva::citationberg;
 
 /// A bibliography / reference listing.
 ///
@@ -292,7 +302,15 @@ impl BibliographyElem {
             .any(|elem| elem.to_packed::<Self>().unwrap().sources.derived.has(key))
     }
 
+    /// Find all bibliography keys. Without the `bibliography` feature there
+    /// are none. Added by diaryx-org; see PATCH.md.
+    #[cfg(not(feature = "bibliography"))]
+    pub fn keys(_: Tracked<dyn Introspector + '_>) -> Vec<(Label, Option<EcoString>)> {
+        vec![]
+    }
+
     /// Find all bibliography keys.
+    #[cfg(feature = "bibliography")]
     pub fn keys(
         introspector: Tracked<dyn Introspector + '_>,
     ) -> Vec<(Label, Option<EcoString>)> {
@@ -355,7 +373,18 @@ pub struct Bibliography(
 );
 
 impl Bibliography {
+    /// Without the `bibliography` feature, a bibliography is never loaded.
+    /// Added by diaryx-org; see PATCH.md.
+    #[cfg(not(feature = "bibliography"))]
+    fn load(
+        _: Tracked<dyn World + '_>,
+        sources: Spanned<OneOrMultiple<DataSource>>,
+    ) -> SourceResult<Derived<OneOrMultiple<DataSource>, Self>> {
+        bail!(sources.span, "bibliographies are not supported by this build of Typst")
+    }
+
     /// Load a bibliography from data sources.
+    #[cfg(feature = "bibliography")]
     fn load(
         world: Tracked<dyn World + '_>,
         sources: Spanned<OneOrMultiple<DataSource>>,
@@ -366,6 +395,7 @@ impl Bibliography {
     }
 
     /// Decode a bibliography from loaded data sources.
+    #[cfg(feature = "bibliography")]
     #[comemo::memoize]
     #[typst_macros::time(name = "load bibliography")]
     fn decode(data: &[Loaded]) -> SourceResult<Bibliography> {
@@ -406,6 +436,7 @@ impl Bibliography {
         self.0.contains_key(&key)
     }
 
+    #[cfg(feature = "bibliography")]
     fn get(&self, key: Label) -> Option<&hayagriva::Entry> {
         self.0.get(&key)
     }
@@ -421,6 +452,7 @@ impl Debug for Bibliography {
     }
 }
 
+#[cfg(feature = "bibliography")]
 /// Decode on library from one data source.
 fn decode_library(loaded: &Loaded) -> SourceResult<Library> {
     let data = loaded.data.as_str().within(loaded)?;
@@ -481,6 +513,7 @@ fn decode_library(loaded: &Loaded) -> SourceResult<Library> {
     }
 }
 
+#[cfg(feature = "bibliography")]
 /// Format a BibLaTeX loading error.
 fn format_biblatex_error(errors: Vec<BibLaTeXError>) -> LoadError {
     // TODO: return multiple errors?
@@ -526,7 +559,18 @@ impl CslStyle {
         Ok(Derived::new(source, style))
     }
 
+    /// A built-in CSL style, without the `bibliography` feature: named, but
+    /// never read. Added by diaryx-org; see PATCH.md.
+    #[cfg(not(feature = "bibliography"))]
+    pub fn from_archived(archived: ArchivedStyle) -> CslStyle {
+        Self(Arc::new(ManuallyHash::new(
+            citationberg::IndependentStyle,
+            typst_utils::hash128(&(TypeId::of::<ArchivedStyle>(), archived)),
+        )))
+    }
+
     /// Load a built-in CSL style.
+    #[cfg(feature = "bibliography")]
     #[comemo::memoize]
     pub fn from_archived(archived: ArchivedStyle) -> CslStyle {
         match archived.get() {
@@ -571,6 +615,13 @@ pub enum CslSource {
 }
 
 impl Reflect for CslSource {
+    // diaryx-org: without the `bibliography` feature, no style is built in.
+    #[cfg(not(feature = "bibliography"))]
+    fn input() -> CastInfo {
+        DataSource::input()
+    }
+
+    #[cfg(feature = "bibliography")]
     #[comemo::memoize]
     fn input() -> CastInfo {
         let source = std::iter::once(DataSource::input());
@@ -645,7 +696,11 @@ impl IntoValue for CslSource {
     fn into_value(self) -> Value {
         match self {
             // We prefer the shorter names which are at the back of the array.
+            #[cfg(feature = "bibliography")]
             Self::Named(v, _) => v.names().last().unwrap().into_value(),
+            // diaryx-org; see PATCH.md.
+            #[cfg(not(feature = "bibliography"))]
+            Self::Named(v, _) => v.0.resolve().as_str().into_value(),
             Self::Normal(v) => v.into_value(),
         }
     }
@@ -745,11 +800,27 @@ impl Works {
         // hayagriva.
         let p = prepare(&mut engine, bibs_and_groups);
 
+        // diaryx-org: without the `bibliography` feature there is no
+        // bibliography, so every citation is an error from `prepare`. See
+        // PATCH.md.
+        #[cfg(not(feature = "bibliography"))]
+        return Ok(Arc::new(Works {
+            bibliographies: FxHashMap::default(),
+            groups: p
+                .groups
+                .into_iter()
+                .map(|(loc, group)| (loc, group.map(|_| Content::empty())))
+                .collect(),
+        }));
+
         // Render the bibliography and citations with hayagriva.
+        #[cfg(feature = "bibliography")]
         let mut offsets = FxHashMap::default();
+        #[cfg(feature = "bibliography")]
         let rendered =
             p.bibs.iter().map(|bib| render(bib, &mut offsets)).collect::<Vec<_>>();
 
+        #[cfg(feature = "bibliography")]
         Ok(Arc::new(Works {
             bibliographies: show_bibliographies(world, &p, &rendered),
             groups: show_cite_groups(world, p, &rendered),
@@ -1023,6 +1094,7 @@ fn select_auto_bib(
         .map(|(idx, _)| BibIndex(idx))
 }
 
+#[cfg(feature = "bibliography")]
 /// Renders the bibliography and citation groups with hayagriva.
 fn render<'a>(
     bib: &PreparedBibliography<'a>,
@@ -1110,6 +1182,7 @@ fn render<'a>(
     rendered
 }
 
+#[cfg(feature = "bibliography")]
 /// Whether a rendered bibliography item displays a citation number.
 ///
 /// For styles with `second-field-align` (like IEEE), the number resides in
@@ -1128,6 +1201,7 @@ fn displays_citation_number(item: &hayagriva::BibliographyItem) -> bool {
         })
 }
 
+#[cfg(feature = "bibliography")]
 /// Creates a hayagriva citation item for a citation element.
 fn citation_item<'a>(
     entry: &'a hayagriva::Entry,
@@ -1157,6 +1231,7 @@ fn citation_item<'a>(
     CitationItem::new(entry, locator, None, hidden, special_form)
 }
 
+#[cfg(feature = "bibliography")]
 /// Produces the structured content for all [`BibliographyElem`]s in the
 /// document. The output of this is directly stored in the [`Works`] and
 /// consumed by the target-specific bibliography show rules.
@@ -1185,6 +1260,7 @@ fn show_bibliographies(
         .collect()
 }
 
+#[cfg(feature = "bibliography")]
 /// Turns a bibliography rendered with hayagriva into a final
 /// [`RenderedBibliography`].
 fn show_bibliography(
@@ -1230,6 +1306,7 @@ fn show_bibliography(
     Ok(RenderedBibliography { entries, hanging_indent: rendered.hanging_indent })
 }
 
+#[cfg(feature = "bibliography")]
 /// Produces the content for all [`CiteGroup`]s in the document. The output of
 /// this is directly stored in the [`Works`] and consumed by [`CiteGroup`] show
 /// rule.
@@ -1252,6 +1329,7 @@ fn show_cite_groups(
         .collect()
 }
 
+#[cfg(feature = "bibliography")]
 /// Produces the content for a [`CiteGroup`] by stitching together the hayagriva
 /// output for each subgroup and interspersing potential space elements that
 /// were retained between subgroups.
@@ -1276,6 +1354,7 @@ fn show_cite_group(
     Ok(Content::sequence(seq))
 }
 
+#[cfg(feature = "bibliography")]
 /// Displays a single citation subgroup.
 fn show_subgroup(
     world: Tracked<dyn World + '_>,
@@ -1314,6 +1393,7 @@ fn show_subgroup(
     Ok(realized)
 }
 
+#[cfg(feature = "bibliography")]
 /// Creates a map from citation keys to the citation group containing the first
 /// citation assigned to a particular bibliography that references the key.
 ///
@@ -1330,6 +1410,7 @@ fn links_to_citations(groups: &[Subgroup]) -> FxHashMap<ResolvedPicoStr, Locatio
     map
 }
 
+#[cfg(feature = "bibliography")]
 /// Creates a map from a bibliography index + citation key to the corresponding
 /// entry in the bibliography.
 ///
@@ -1349,6 +1430,7 @@ fn links_to_entries<'a>(
     links
 }
 
+#[cfg(feature = "bibliography")]
 /// Each reference is assigned a manually created well-known location that is
 /// derived from the bibliography's location. This way, citations can link to
 /// them without having to query for them (which would incur an extra layout
@@ -1357,6 +1439,7 @@ fn entry_location(bib: &PreparedBibliography, k: usize) -> Location {
     bib.elem.location().unwrap().variant(k + 1)
 }
 
+#[cfg(feature = "bibliography")]
 /// Additional data needed to show hayagriva elements as content.
 struct ShowCtx<'a> {
     /// The world that is used to evaluate mathematical material.
@@ -1369,6 +1452,7 @@ struct ShowCtx<'a> {
     link: &'a dyn Fn(usize) -> Option<Location>,
 }
 
+#[cfg(feature = "bibliography")]
 /// Displays rendered hayagriva elements.
 ///
 /// The `prefix` can be a separate content storage where `left-margin`
@@ -1395,6 +1479,7 @@ fn show_elem_children(
     ))
 }
 
+#[cfg(feature = "bibliography")]
 /// Displays a rendered hayagriva element.
 fn show_elem_child(
     ctx: &ShowCtx,
@@ -1415,6 +1500,7 @@ fn show_elem_child(
     })
 }
 
+#[cfg(feature = "bibliography")]
 /// Displays a block-level element.
 fn show_elem(
     ctx: &ShowCtx,
@@ -1465,6 +1551,7 @@ fn show_elem(
     Ok(content)
 }
 
+#[cfg(feature = "bibliography")]
 /// Displays math.
 fn show_math(ctx: &ShowCtx, math: &str) -> Content {
     let library = ctx.world.library();
@@ -1484,6 +1571,7 @@ fn show_math(ctx: &ShowCtx, math: &str) -> Content {
     .unwrap_or_else(|_| TextElem::packed(math).spanned(ctx.span))
 }
 
+#[cfg(feature = "bibliography")]
 /// Displays a link.
 fn show_link(
     ctx: &ShowCtx,
@@ -1496,12 +1584,14 @@ fn show_link(
         .spanned(ctx.span))
 }
 
+#[cfg(feature = "bibliography")]
 /// Displays transparent pass-through content.
 fn show_transparent(ctx: &ShowCtx, i: usize, format: &hayagriva::Formatting) -> Content {
     let content = (ctx.supplement)(i).unwrap_or_default();
     show_with_formatting(content, format)
 }
 
+#[cfg(feature = "bibliography")]
 /// Displays formatted hayagriva text as content.
 fn show_formatted(
     ctx: &ShowCtx,
@@ -1515,6 +1605,7 @@ fn show_formatted(
     show_with_formatting(content, &formatted.formatting)
 }
 
+#[cfg(feature = "bibliography")]
 /// Applies hayagriva formatting to content.
 fn show_with_formatting(mut content: Content, format: &hayagriva::Formatting) -> Content {
     match format.font_style {
@@ -1568,6 +1659,7 @@ fn show_with_formatting(mut content: Content, format: &hayagriva::Formatting) ->
     content
 }
 
+#[cfg(feature = "bibliography")]
 /// Creates a locale code from language and optionally region.
 fn locale(lang: Lang, region: Option<Region>) -> citationberg::LocaleCode {
     let mut value = String::with_capacity(5);
@@ -1691,6 +1783,7 @@ fn key_does_not_exist(
     )
 }
 
+#[cfg(feature = "bibliography")]
 /// The error message when a CSL style cannot be used for bibliographies.
 #[cold]
 fn style_unsuitable(source: &CslSource) -> EcoString {
@@ -1703,6 +1796,7 @@ fn style_unsuitable(source: &CslSource) -> EcoString {
     }
 }
 
+#[cfg(feature = "bibliography")]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1736,5 +1830,49 @@ mod tests {
             missing.is_empty(),
             "missing style names in CslSource cast info: '{missing:?}'"
         );
+    }
+}
+
+/// Without the `bibliography` feature, stand-ins for what the elements above
+/// name of Hayagriva, so that `bibliography` and `cite` exist, cast and can be
+/// styled as before. A style is named without being read, and no bibliography
+/// is ever loaded, so no entry exists. Added by diaryx-org; see PATCH.md.
+#[cfg(not(feature = "bibliography"))]
+mod hayagriva {
+    /// An entry in a bibliography. Never made in this build.
+    #[derive(Clone)]
+    pub enum Entry {}
+
+    pub mod archive {
+        use typst_utils::PicoStr;
+
+        /// A built-in style, by the name it was given.
+        #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+        pub struct ArchivedStyle(pub PicoStr);
+
+        impl ArchivedStyle {
+            /// The default style.
+            #[allow(non_upper_case_globals)]
+            pub const InstituteOfElectricalAndElectronicsEngineers: Self =
+                Self(PicoStr::constant("ieee"));
+
+            /// Any name is a style, since none is read.
+            pub fn by_name(name: &str) -> Option<Self> {
+                Some(Self(PicoStr::intern(name)))
+            }
+        }
+    }
+
+    pub mod citationberg {
+        /// A CSL style. Never read in this build.
+        #[derive(Debug)]
+        pub struct IndependentStyle;
+
+        impl IndependentStyle {
+            /// Any CSL file is a style, since none is read.
+            pub fn from_xml(_: &str) -> Result<Self, &'static str> {
+                Ok(Self)
+            }
+        }
     }
 }

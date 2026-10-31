@@ -27,5 +27,16 @@ comemo = { workspace = true }
 ecow = { workspace = true }
 rustc-hash = { workspace = true }
 
+# diaryx-org: typst-library's feature gates, all on by default, as upstream
+# has them. See PATCH.md, "Feature gates".
+[features]
+default = ["bibliography", "plugin", "csv", "yaml", "cbor", "pdf-images"]
+bibliography = ["typst-library/bibliography"]
+plugin = ["typst-library/plugin"]
+csv = ["typst-library/csv"]
+yaml = ["typst-library/yaml"]
+cbor = ["typst-library/cbor"]
+pdf-images = ["typst-library/pdf-images", "typst-html/pdf-images"]
+
 [lints]
 workspace = true

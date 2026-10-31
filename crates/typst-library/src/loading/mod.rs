@@ -1,7 +1,11 @@
 //! Data loading.
 
+// diaryx-org: behind the `cbor` feature; see PATCH.md.
+#[cfg(feature = "cbor")]
 #[path = "cbor.rs"]
 mod cbor_;
+// diaryx-org: behind the `csv` feature; see PATCH.md.
+#[cfg(feature = "csv")]
 #[path = "csv.rs"]
 mod csv_;
 #[path = "json.rs"]
@@ -12,15 +16,20 @@ mod read_;
 mod toml_;
 #[path = "xml.rs"]
 mod xml_;
+// diaryx-org: behind the `yaml` feature; see PATCH.md.
+#[cfg(feature = "yaml")]
 #[path = "yaml.rs"]
 mod yaml_;
 
+#[cfg(feature = "cbor")]
 pub use self::cbor_::*;
+#[cfg(feature = "csv")]
 pub use self::csv_::*;
 pub use self::json_::*;
 pub use self::read_::*;
 pub use self::toml_::*;
 pub use self::xml_::*;
+#[cfg(feature = "yaml")]
 pub use self::yaml_::*;
 
 use comemo::Tracked;
@@ -34,10 +43,13 @@ use crate::foundations::{Bytes, OneOrMultiple, PathOrStr, Scope, Str, cast};
 pub(super) fn define(global: &mut Scope) {
     global.start_category(crate::Category::DataLoading);
     global.define_func::<read>();
+    #[cfg(feature = "csv")]
     global.define_func::<csv>();
     global.define_func::<json>();
     global.define_func::<toml>();
+    #[cfg(feature = "yaml")]
     global.define_func::<yaml>();
+    #[cfg(feature = "cbor")]
     global.define_func::<cbor>();
     global.define_func::<xml>();
     global.reset_category();

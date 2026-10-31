@@ -29,5 +29,11 @@ rustc-hash = { workspace = true }
 time = { workspace = true }
 unicode-math-class = { workspace = true }
 
+# diaryx-org: a PDF image in a frame, drawn by typst-svg. On by default, as
+# upstream has it. See PATCH.md, "Feature gates".
+[features]
+default = ["pdf-images"]
+pdf-images = ["typst-svg/pdf-images"]
+
 [lints]
 workspace = true

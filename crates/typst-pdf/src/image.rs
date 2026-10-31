@@ -4,12 +4,14 @@ use std::sync::{Arc, OnceLock};
 use ecow::eco_format;
 use image::{DynamicImage, EncodableLayout, GenericImageView, Rgba};
 use krilla::image::{BitsPerComponent, CustomImage, ImageColorspace};
+#[cfg(feature = "pdf-images")]
 use krilla::pdf::PdfDocument;
 use krilla::surface::Surface;
 use krilla_svg::{SurfaceExt, SvgSettings};
 use typst_library::diag::{At, SourceResult};
 use typst_library::foundations::Smart;
 use typst_library::layout::{Abs, Angle, Ratio, Size, Transform};
+#[cfg_attr(not(feature = "pdf-images"), allow(unused_imports))]
 use typst_library::visualize::{
     ExchangeFormat, Image, ImageKind, ImageScaling, PdfImage, RasterFormat, RasterImage,
 };
@@ -70,10 +72,20 @@ pub(crate) fn handle_image(
                 );
             }
         }
+        #[cfg(feature = "pdf-images")]
         ImageKind::Pdf(pdf) => {
             if let Some(size) = size.to_krilla() {
                 surface.draw_pdf_page(&convert_pdf(pdf), size, pdf.page_index());
             }
+        }
+        // diaryx-org: without the `pdf-images` feature, krilla cannot embed a
+        // PDF page. See PATCH.md.
+        #[cfg(not(feature = "pdf-images"))]
+        ImageKind::Pdf(_) => {
+            typst_library::diag::bail!(
+                span,
+                "PDF images are not supported by this build of typst-pdf"
+            )
         }
     }
 
@@ -210,6 +222,7 @@ fn convert_raster(
     }
 }
 
+#[cfg(feature = "pdf-images")]
 #[comemo::memoize]
 fn convert_pdf(pdf: &PdfImage) -> PdfDocument {
     PdfDocument::new(pdf.document().pdf().clone())

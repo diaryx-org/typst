@@ -1,9 +1,14 @@
+// diaryx-org: without the `plugin` feature, much here goes unused; see
+// PATCH.md.
+#![cfg_attr(not(feature = "plugin"), allow(unused_imports))]
+
 use std::fmt::{self, Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
 use ecow::{EcoString, eco_format};
 use typst_syntax::Spanned;
+#[cfg(feature = "plugin")]
 use wasmi::Memory;
 
 use crate::diag::{At, SourceResult, StrResult, bail};
@@ -237,6 +242,34 @@ cast! {
     v: Func => v.to_plugin().ok_or("expected plugin function")?.clone(),
 }
 
+/// Without the `plugin` feature there is no WebAssembly runtime, so no plugin
+/// is ever loaded, and `plugin` fails. The type stays, uninhabited, so that
+/// `PluginFunc` and everything that names it are as they were. Added by
+/// diaryx-org; see PATCH.md.
+#[cfg(not(feature = "plugin"))]
+#[derive(Debug, PartialEq, Hash)]
+enum Plugin {}
+
+#[cfg(not(feature = "plugin"))]
+impl Plugin {
+    fn module(_: Bytes) -> StrResult<Module> {
+        bail!("WebAssembly plugins are not supported by this build of Typst")
+    }
+
+    fn call(&self, _: &str, _: Vec<Bytes>) -> StrResult<Bytes> {
+        match *self {}
+    }
+
+    fn transition(&self, _: &str, _: Vec<Bytes>) -> StrResult<Plugin> {
+        match *self {}
+    }
+
+    fn into_module(self) -> Module {
+        match self {}
+    }
+}
+
+#[cfg(feature = "plugin")]
 /// A plugin with potentially multiple instances for multi-threaded
 /// execution.
 struct Plugin {
@@ -256,6 +289,7 @@ struct Plugin {
     fingerprint: u128,
 }
 
+#[cfg(feature = "plugin")]
 impl Plugin {
     /// Create a plugin and turn it into a module.
     #[comemo::memoize]
@@ -380,18 +414,21 @@ impl Plugin {
     }
 }
 
+#[cfg(feature = "plugin")]
 impl Debug for Plugin {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         f.pad("Plugin(..)")
     }
 }
 
+#[cfg(feature = "plugin")]
 impl PartialEq for Plugin {
     fn eq(&self, other: &Self) -> bool {
         self.base.bytes == other.base.bytes && self.fingerprint == other.fingerprint
     }
 }
 
+#[cfg(feature = "plugin")]
 impl Hash for Plugin {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.base.bytes.hash(state);
@@ -399,6 +436,7 @@ impl Hash for Plugin {
     }
 }
 
+#[cfg(feature = "plugin")]
 /// Shared by all pooled & transitioned variants of the plugin.
 struct PluginBase {
     /// The raw WebAssembly bytes.
@@ -409,6 +447,7 @@ struct PluginBase {
     linker: wasmi::Linker<CallData>,
 }
 
+#[cfg(feature = "plugin")]
 /// An single plugin instance for single-threaded execution.
 struct PluginInstance {
     /// The underlying wasmi instance.
@@ -417,6 +456,7 @@ struct PluginInstance {
     store: wasmi::Store<CallData>,
 }
 
+#[cfg(feature = "plugin")]
 /// A snapshot of a plugin instance.
 struct Snapshot {
     /// The number of pages in the main memory.
@@ -425,6 +465,7 @@ struct Snapshot {
     mem_data: Vec<u8>,
 }
 
+#[cfg(feature = "plugin")]
 impl PluginInstance {
     /// Create a new execution instance of a plugin, potentially restoring
     /// a snapshot.
@@ -554,6 +595,7 @@ impl PluginInstance {
     }
 }
 
+#[cfg(feature = "plugin")]
 /// The persistent store data used for communication between store and host.
 #[derive(Default)]
 struct CallData {
@@ -565,6 +607,7 @@ struct CallData {
     memory_error: Option<MemoryError>,
 }
 
+#[cfg(feature = "plugin")]
 /// If there was an error reading/writing memory, keep the offset + length to
 /// display an error message.
 struct MemoryError {
@@ -573,6 +616,7 @@ struct MemoryError {
     write: bool,
 }
 
+#[cfg(feature = "plugin")]
 /// Write the arguments to the plugin function into the plugin's memory.
 fn wasm_minimal_protocol_write_args_to_buffer(
     mut caller: wasmi::Caller<CallData>,
@@ -594,6 +638,7 @@ fn wasm_minimal_protocol_write_args_to_buffer(
     }
 }
 
+#[cfg(feature = "plugin")]
 /// Extracts the output of the plugin function from the plugin's memory.
 fn wasm_minimal_protocol_send_result_to_host(
     mut caller: wasmi::Caller<CallData>,

@@ -13,15 +13,15 @@ keywords = { workspace = true }
 readme = { workspace = true }
 
 [dependencies]
-typst-html = { workspace = true }
+typst-html = { workspace = true, features = ["pdf-images"] }
 typst-layout = { workspace = true }
 typst-library = { workspace = true }
 typst-macros = { workspace = true }
 typst-syntax = { workspace = true }
 typst-timing = { workspace = true }
 typst-utils = { workspace = true }
-typst-pdf = { workspace = true }
-typst-svg = { workspace = true }
+typst-pdf = { workspace = true, features = ["pdf-images"] }
+typst-svg = { workspace = true, features = ["pdf-images"] }
 typst-render = { workspace = true }
 comemo = { workspace = true }
 ecow = { workspace = true }
